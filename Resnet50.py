@@ -10,7 +10,7 @@ class BottleNeck(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1):
         super().__init__()
 
-        self.residual_function = nn.Sequential([
+        self.residual_function = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, 1, bias=False),
             nn.BatchNorm2d(out_channel),
             nn.ReLU(inplace=True),
@@ -20,7 +20,7 @@ class BottleNeck(nn.Module):
             nn.AvgPool2d(stride) if stride >1 else nn.Identity(),
             nn.Conv2d(out_channel,out_channel*BottleNeck.expansion,1,bias=False),
             nn.BatchNorm2d(out_channel*BottleNeck.expansion),
-        ])
+        )
 
         
         self.downsample = None
@@ -34,7 +34,8 @@ class BottleNeck(nn.Module):
             ]))
         
         self.relu3 = nn.ReLU(inplace=True)
-    def forward(self, x: torch.Tensor):
+
+    def forward(self, x):
         identity = x
         out = self.residual_function(x)
 
@@ -58,7 +59,7 @@ class AttentionPool2d(nn.Module):
     def forward(self, x):
         x = rearrange(x,'b c h w -> (h w) b c')
         x = torch.cat([x.mean(dim=0,keepdim=True),x],dim=0) #keep_dim: mean해도 차원이 줄어들지 않음
-        x = x + self.positional_embedding(x)[:,None,:]
+        x = x + self.positional_embedding[:,None,:]
         x,_ = F.multi_head_attention_forward(
             query = x[:1],
             key = x,
@@ -84,7 +85,7 @@ class AttentionPool2d(nn.Module):
 
 class ModifiedResNet(nn.Module):
     def __init__(self,layers,heads:int,input_size=224,emb_size=64):
-        super.__init__()
+        super().__init__()
         self.emb_size=emb_size
         self.input_size = input_size
         self.heads = heads
@@ -101,7 +102,7 @@ class ModifiedResNet(nn.Module):
         self.relu3 = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(2)
 
-        self.in_channels = self.emb_size
+        self.in_channels = emb_size
         self.layer1 = self.make_layer(64,layers[0])
         self.layer2 = self.make_layer(128,layers[1],stride=2)
         self.layer3 = self.make_layer(256,layers[2],stride=2)
@@ -113,8 +114,12 @@ class ModifiedResNet(nn.Module):
     def make_layer(self,out_channels,blocks, stride=1):
         layers = []
 
-        for _ in range(blocks):
-            layers.append(BottleNeck(self.in_channels,out_channels,stride))
+        for i in range(blocks):
+            if i==0:
+                st=stride
+            else: 
+                st=1
+            layers.append(BottleNeck(self.in_channels,out_channels,stride=st))
             self.in_channels = out_channels*BottleNeck.expansion
         
         return nn.Sequential(*layers)
@@ -125,6 +130,7 @@ class ModifiedResNet(nn.Module):
             x = self.relu2(self.bn2(self.conv2(x)))
             x = self.relu3(self.bn3(self.conv3(x)))
             x = self.avgpool(x)
+            return x
         
         x = stem(x)
         x = self.layer1(x)

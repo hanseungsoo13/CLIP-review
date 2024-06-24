@@ -17,7 +17,7 @@ class ResidualAttentionBlock(nn.Module): #Transformer encoder
     def __init__(self,model_dim:int, n_heads:int, attn_mask=None):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(model_dim,n_heads)
+        self.attn = nn.MultiheadAttention(model_dim,n_heads,batch_first=True)
         self.ln_1 = nn.LayerNorm(model_dim)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc",nn.Linear(model_dim,model_dim*4)),
@@ -28,7 +28,7 @@ class ResidualAttentionBlock(nn.Module): #Transformer encoder
         self.attn_mask = attn_mask
     
     def attention(self,x:torch.Tensor):
-        self.attn_mask = self.attn_mask.to(dtype = x.dytpe) if self.attn_mask is not None else None
+        self.attn_mask = self.attn_mask.to('cuda') if self.attn_mask is not None else None
         return self.attn(x,x,x,attn_mask = self.attn_mask)[0]
     
     def forward(self,x):
@@ -37,7 +37,7 @@ class ResidualAttentionBlock(nn.Module): #Transformer encoder
         return x
 
 class positional_encoding(nn.Module):
-    def __init__(self,n_seq,model_dim):
+    def __init__(self,n_seq,model_dim,device='cuda'):
         super().__init__()
         self.pos_emb = torch.empty(n_seq,model_dim)
         number = torch.arange(0,n_seq,dtype=torch.float).view(-1,1)
@@ -45,7 +45,7 @@ class positional_encoding(nn.Module):
         self.pos_emb.data[:,0::2] = torch.sin(number/division_term)
         self.pos_emb.data[:,1::2] = torch.cos(number/division_term)
     
-        self.pos_emb = self.pos_emb.unsqueeze(0).transpose(0,1)
+        self.pos_emb = self.pos_emb.unsqueeze(0).to(device)
     
     def forward(self,x):
         x = x + self.pos_emb
@@ -65,6 +65,7 @@ class Transformer(nn.Module):
         x = self.token_embedding(x)
         x = self.position_embedding(x)
         x = self.resblocks(x)
+        x = x.squeeze(0)
 
         return x
 
